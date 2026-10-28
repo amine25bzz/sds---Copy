@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <title>Treasure Road - Menu</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lalezar&family=Tajawal:wght@400;500;700;800&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="home-container">
+  <div class="home-wrap">
+    <div>
+      <h1 class="title">TREASURE ROAD</h1>
+      <p class="tag">Two heroes on one path. Now with an arsenal of weapons — pistol, shotgun, knife, grenades, mines. Defeat your opponent!</p>
+    </div>
+    
+    <section>
+      <h2>CHOOSE YOUR HERO</h2>
+      <div class="cards" id="cards">
+        <button class="card sel" type="button" data-side="0">
+          <img src="images/player2h.gif" alt="Rex">
+          <div class="nm" style="color:var(--teal)">REX</div>
+        </button>
+        <button class="card" type="button" data-side="1">
+          <img src="images/player4h.gif" alt="Zara">
+          <div class="nm" style="color:var(--coral)">ZARA</div>
+        </button>
+      </div>
+    </section>
+
+    <section id="aiBox">
+      <h2>AI DIFFICULTY</h2>
+      <div class="row" id="diffs">
+        <button class="chip" type="button" data-d="0">EASY</button>
+        <button class="chip on" type="button" data-d="1">NORMAL</button>
+        <button class="chip" type="button" data-d="2">HARD</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 style="margin:0; text-align:center;">PLAY WITH A FRIEND</h2>
+      <div class="codebox">
+        <span class="status" style="min-height:0">YOUR CODE</span>
+        <span class="code" id="myCode">-----</span>
+        <button class="mini" id="copyCode" type="button">COPY</button>
+      </div>
+      <div class="join">
+        <input id="joinIn" type="text" autocomplete="off" maxlength="5" placeholder="FRIEND'S CODE">
+        <button class="mini" id="joinBtn" type="button">JOIN</button>
+        <button class="mini" id="homeBtn" type="button" hidden>MY ROOM</button>
+      </div>
+      <div class="status" id="netStatus">Connecting...</div>
+    </section>
+
+    <div class="row">
+      <button class="btn" id="startBtn" type="button">PLAY</button>
+    </div>
+  </div>
+</div>
+
+<script src="Home.js"></script>
+</body>
+</html>
