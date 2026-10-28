@@ -19,8 +19,12 @@ frame.insertBefore(layer, $('#hud'));
 const WORLD = 6400, H = 400, Y0 = 252, Y1 = 372, HORIZON = 238;
 let VW = 800, SC = 1, CS = 1;
 const START = 130;
-const HERO_VIS = 66;          // الارتفاع الظاهر للبطل (يُقاس من الصورة نفسها)
-const HERO_SCALE = [1, 1];    // تكبير/تصغير إضافي: [REX, ZARA]
+
+// ===== أحجام الشخصيات (الارتفاع الظاهر فعلاً بوحدات العالم، ارتفاع الساحة = 400) =====
+const HERO_VIS = 84;           // الارتفاع الظاهر للبطل
+const HERO_SCALE = [1, 1];     // [REX, ZARA] تعديل إضافي لكل بطل
+const ENEMY_VIS = { thug: 80, brute: 100, raptor: 62 };   // الارتفاع الظاهر لكل عدو
+const PROP_VIS = { crate: 38, barrel: 42 };               // الصناديق والبراميل
 
 const rr = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -884,16 +888,20 @@ function updateBombs(dt) {
 // ==========================================
 // RENDER LOGIC & ANIMATIONS
 // ==========================================
+
+// رسم صورة ثابتة داخل الكانفاس مع الحفاظ على نسبتها وعرضها كاملة
 function drawImg(g, img, x, y, w, h, face) {
-    if (!img || !img.complete || img.naturalWidth === 0) return;
-    g.save();
-    if (face === -1) {
-        g.translate(x, y); g.scale(-1, 1);
-        g.drawImage(img, -w/2, -h, w, h);
-    } else {
-        g.drawImage(img, x - w/2, y - h, w, h);
-    }
-    g.restore();
+  if (!img || !img.complete || img.naturalWidth === 0) return;
+  const k = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+  const dw = img.naturalWidth * k, dh = img.naturalHeight * k;
+  g.save();
+  if (face === -1) {
+    g.translate(x, y); g.scale(-1, 1);
+    g.drawImage(img, -dw / 2, -dh, dw, dh);
+  } else {
+    g.drawImage(img, x - dw / 2, y - dh, dw, dh);
+  }
+  g.restore();
 }
 
 // ==========================================
@@ -931,11 +939,12 @@ function placeSprite(o, key, shared, x, y, face, zi, vis, sizeFn) {
   el.style.opacity = vis ? '1' : '0';
   el.style.width = (w * CS) + 'px';
   el.style.height = (h * CS) + 'px';
-  el.style.transform = 'translate(' + ((x - cam - w / 2) * CS) + 'px,' + ((y + (d[2] || 0) - h) * CS) + 'px) scaleX(' + (face === -1 ? -1 : 1) + ')';
+  const ox = (d[3] || 0) * (face === -1 ? -1 : 1);
+  el.style.transform = 'translate(' + ((x - cam - w / 2 + ox) * CS) + 'px,' + ((y + (d[2] || 0) - h) * CS) + 'px) scaleX(' + (face === -1 ? -1 : 1) + ')';
   el.style.zIndex = zi;
 }
 
-// يقيس الجزء الظاهر فعلاً من صورة الوقوف (بدون الفراغ الشفاف) فيتساوى حجم البطلين
+// يقيس الجزء الظاهر فعلاً من صورة الوقوف (بدون الفراغ الشفاف) فيتساوى حجم الشخصيات
 function heroMetrics(base) {
   if (!base || !base.complete || !base.naturalWidth) return null;
   if (base._m) return base._m;
@@ -958,17 +967,73 @@ function heroMetrics(base) {
   return base._m;
 }
 
-function heroSize(el, base, side) {
+// حجم موحد: يقيس الجزء المرئي فقط من صورة الوقوف ويطبق نفس المقياس على كل الحركات
+function fitSize(el, base, vis) {
   const m = heroMetrics(base);
   const ch = m ? m.ch : ((base && base.naturalHeight) || el.naturalHeight);
-  const k = HERO_VIS * (HERO_SCALE[side] || 1) / ch;
+  const k = vis / ch;
   return [el.naturalWidth * k, el.naturalHeight * k, m ? m.pad * k : 0];
 }
+function heroSize(el, base, side) {
+  return fitSize(el, base, HERO_VIS * (HERO_SCALE[side] || 1));
+}
+// ===== قياس كل صورة (GIF) على حدة: الجزء المرئي فعلاً (أعلى/أسفل/مركز أفقي) =====
+const _measureCache = new Map();
+function measureImg(img) {
+  if (!img || !img.complete || !img.naturalWidth) return null;
+  const key = img.src;
+  if (_measureCache.has(key)) return _measureCache.get(key);
+  let m = null;
+  try {
+    const w = img.naturalWidth, h = img.naturalHeight;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const x = c.getContext('2d');
+    x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, w, h).data;
+    let t = -1, b = -1, l = w, r = -1;
+    for (let yy = 0; yy < h; yy++) {
+      for (let xx = 0; xx < w; xx++) {
+        if (d[(yy * w + xx) * 4 + 3] > 30) {
+          if (t < 0) t = yy;
+          b = yy;
+          if (xx < l) l = xx;
+          if (xx > r) r = xx;
+        }
+      }
+    }
+    if (t >= 0) m = { ch: b - t + 1, cw: r - l + 1, pad: h - 1 - b, cx: (l + r) / 2, nw: w, nh: h };
+    } catch (e) {}
+  if (m) _measureCache.set(key, m);   // لا نخزن الفشل حتى نعيد المحاولة
+  return m;
+}
 
-function charSize(el, base, h) {
-  const bh = base && base.naturalHeight ? base.naturalHeight : el.naturalHeight;
-  const k = h / bh;
-  return [el.naturalWidth * k, el.naturalHeight * k];
+// البطل المنافس: كل حركة تُقاس بنفسها وتُضبط ليكون ارتفاع الشخصية الظاهر ثابتاً دائماً
+// lying = حركة الموت (الشخصية مستلقية) فتستعمل مقياس صورة الوقوف حتى لا تتضخم
+function rivalSize(el, base, side, lying) {
+  const vis = HERO_VIS * (HERO_SCALE[side] || 1);
+  const nw = el.naturalWidth, nh = el.naturalHeight;
+  const mb = measureImg(base);
+  let k, m = null;
+  if (lying) {
+    // الشخصية مستلقية أفقياً: طولها الأفقي = ارتفاع البطل الواقف
+    m = measureImg(el);
+    if (m) k = vis / m.cw;
+    else k = mb ? vis / mb.ch : vis / ((base && base.naturalHeight) || nh);
+  } else {
+    m = measureImg(el);
+    if (m) k = vis / m.ch;
+    else k = vis / (mb ? mb.ch : nh);
+  }
+  const padY = m ? m.pad * k : (mb ? mb.pad * k : 0);
+  const offX = m ? -(m.cx - nw / 2) * k : 0;
+  return [nw * k, nh * k, padY, offX];
+}
+
+// ارتفاع ثابت للأغراض الساكنة مع الحفاظ على النسبة الأصلية
+function propSize(el, h) {
+  const k = h / (el.naturalHeight || h);
+  return [el.naturalWidth * k, h];
 }
 
 // يعيد [مفتاح الحركة، صورة الـ GIF]
@@ -1007,10 +1072,17 @@ function drawChar(g, f, t) {
   const blink = f.inv > 0 && f.st !== 'd' && Math.floor(t * 14) % 2;
   const deadBlink = f.dead && f.st === 'd' && Math.floor(t * 10) % 2;
   const vis = !(blink || deadBlink);
-  if (vis) shadow(g, f.x - cam, f.y + 1, 20, 6);
+  if (vis) shadow(g, f.x - cam, f.y + 1, 22, 6);
   const s = playerSpr(f);
   const base = (f.side === 0 ? IMG.player1 : IMG.player2).idle;
-  placeSprite(f, s[0], s[1], f.x, f.y - f.z, f.face, Math.round(f.y), vis, el => heroSize(el, base, f.side));
+  const p = f.side === 0 ? IMG.player1 : IMG.player2;
+  if (f === ai) {
+    // المنافس: حجم موحد لكل حركاته
+    const lying = s[1] === p.death;
+    placeSprite(f, s[0], s[1], f.x, f.y - f.z, f.face, Math.round(f.y), vis, el => rivalSize(el, base, f.side, lying));
+  } else {
+    placeSprite(f, s[0], s[1], f.x, f.y - f.z, f.face, Math.round(f.y), vis, el => heroSize(el, base, f.side));
+  }
 }
 
 function render(t) {
@@ -1050,14 +1122,14 @@ function render(t) {
   for (const c of crates) {
     if (c.broken || c.x < cam - 80 || c.x > cam + VW + 80) continue;
     shadow(g, c.x - cam, c.y + 2, c.w * .6, 5);
-    placeSprite(c, 'c', IMG.crate, c.x, c.y, 1, Math.round(c.y), true, () => [36, 36]);
+    placeSprite(c, 'c', IMG.crate, c.x, c.y, 1, Math.round(c.y), true, el => propSize(el, PROP_VIS.crate));
   }
 
   // Barrels (GIF)
   for (const b of barrels) {
     if (b.exploded || b.x < cam - 80 || b.x > cam + VW + 80) continue;
     shadow(g, b.x - cam, b.y + 2, 16, 5);
-    placeSprite(b, 'b', IMG.barrel, b.x, b.y, 1, Math.round(b.y), true, () => [32, 36]);
+    placeSprite(b, 'b', IMG.barrel, b.x, b.y, 1, Math.round(b.y), true, el => propSize(el, PROP_VIS.barrel));
   }
 
   // Mines
@@ -1069,13 +1141,11 @@ function render(t) {
   // Enemies (GIF)
   for (const e of enemies) {
     if (e.st === 'dead' && e.t > 0.6) continue;
-    shadow(g, e.x - cam, e.y + 1, 20, 6);
+    shadow(g, e.x - cam, e.y + 1, e.k === 'brute' ? 24 : 20, 6);
     const s = enemySpr(e);
-    let h = 70;
-    if (e.k === 'brute') h = 80;
-    if (e.k === 'raptor') h = 50;
     const base = IMG.enemies[e.k].idle;
-    placeSprite(e, s[0], s[1], e.x, e.y - e.z, e.face, Math.round(e.y), true, el => charSize(el, base, h));
+    const vis = ENEMY_VIS[e.k] || 80;
+    placeSprite(e, s[0], s[1], e.x, e.y - e.z, e.face, Math.round(e.y), true, el => fitSize(el, base, vis));
   }
 
   // Fighters (GIF)
@@ -1093,7 +1163,10 @@ function render(t) {
 
   // Explosions (GIF)
   for (const e of explosions) {
-    placeSprite(e, 'x', IMG.explosion, e.x, e.y - e.z, 1, 2000, true, () => [e.maxR * 2, e.maxR * 2]);
+    placeSprite(e, 'x', IMG.explosion, e.x, e.y - e.z + e.maxR * 0.5, 1, 2000, true, el => {
+      const k = (e.maxR * 2) / (el.naturalWidth || 1);
+      return [el.naturalWidth * k, el.naturalHeight * k];
+    });
   }
 
   // Particles
